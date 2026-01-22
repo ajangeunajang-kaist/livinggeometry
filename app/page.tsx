@@ -117,11 +117,14 @@ const Container = styled.div<{ $whiteBg?: boolean }>`
   background: ${({ $whiteBg }) => ($whiteBg ? "#ffffff" : "black")};
   min-height: 100vh;
   width: 100vw;
+  display: flex;
 `;
 
 const CanvasWrapper = styled.div`
   width: 100%;
   height: 100vh;
+  position: relative;
+  flex: 1;
 `;
 
 
@@ -753,7 +756,10 @@ export default function App() {
   return (
     <Container $whiteBg={whiteBg}>
       <CanvasWrapper>
-        <Canvas camera={{ fov: 80 }} style={{ width: "100%", height: "100%" }}>
+        <Canvas
+          camera={{ fov: 80 }}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
+        >
           <color attach="background" args={[whiteBg ? "#ffffff" : "#000000"]} />
 
           <Suspense fallback={null}>
