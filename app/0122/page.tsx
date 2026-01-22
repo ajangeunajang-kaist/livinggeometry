@@ -54,22 +54,27 @@ type TileProps = {
   modelName: string;
   explosion: number;
   baseColor: string;
+  baseOpacity: number;
   layout: LayoutOption;
   wireframe: boolean;
   flattenTextures: boolean;
   flatPaletteColor: string;
+  flatOpacity: number;
 };
 
 type CityscapeProps = {
   scale: number;
   explosion: number;
   baseColor: string;
+  baseOpacity: number;
   adjacencyColor: string;
+  adjacencyOpacity: number;
   adjacencyWindow: number;
   layout: LayoutOption;
   wireframe: boolean;
   flattenTextures: boolean;
   flatPaletteColor: string;
+  flatOpacity: number;
 };
 
 type AdjacencyLinesProps = {
@@ -77,12 +82,15 @@ type AdjacencyLinesProps = {
   factor: number;
   adjacencyColor: string;
   layout: LayoutOption;
+  adjacencyOpacity: number;
 };
 
 type FragmentProps = {
   fragment: FragmentMesh;
   factor: number;
   baseColor: string;
+  baseOpacity: number;
+  flatOpacity: number;
   layout: LayoutOption;
   wireframe: boolean;
   flattenTextures: boolean;
@@ -117,11 +125,14 @@ const Container = styled.div<{ $whiteBg?: boolean }>`
   background: ${({ $whiteBg }) => ($whiteBg ? "#ffffff" : "black")};
   min-height: 100vh;
   width: 100vw;
+  display: flex;
 `;
 
 const CanvasWrapper = styled.div`
   width: 100%;
   height: 100vh;
+  position: relative;
+  flex: 1;
 `;
 
 
@@ -129,10 +140,12 @@ function Tile({
   modelName,
   explosion,
   baseColor,
+  baseOpacity,
   layout,
   wireframe,
   flattenTextures,
   flatPaletteColor,
+  flatOpacity,
 }: TileProps) {
     const modelPath = `/3d-shibuya/${modelName}`;
     const materials = useLoader(MTLLoader, `${modelPath}.mtl`, (loader) => {
@@ -268,17 +281,19 @@ function Tile({
                     fragment={p} 
                     factor={explosion} 
                     baseColor={baseColor} 
+                    baseOpacity={baseOpacity}
                     layout={layout} 
                     wireframe={wireframe}
                     flattenTextures={flattenTextures}
                     flatPaletteColor={flatPaletteColor}
+                    flatOpacity={flatOpacity}
                 />
             ))}
         </group>
     );
 }
 
-function Cityscape({ scale, explosion, baseColor, adjacencyColor, adjacencyWindow, layout, wireframe, flattenTextures, flatPaletteColor }: CityscapeProps) {
+function Cityscape({ scale, explosion, baseColor, baseOpacity, adjacencyColor, adjacencyOpacity, adjacencyWindow, layout, wireframe, flattenTextures, flatPaletteColor, flatOpacity }: CityscapeProps) {
     const tiles = [
         'Tile_173078_LD_010_017_L18',
         'Tile_173078_LD_010_018_L18',
@@ -566,10 +581,12 @@ function Cityscape({ scale, explosion, baseColor, adjacencyColor, adjacencyWindo
                         modelName={name} 
                         explosion={explosion} 
                         baseColor={baseColor} 
+                    baseOpacity={baseOpacity}
                         layout={layout}
                         wireframe={wireframe}
                         flattenTextures={flattenTextures}
                         flatPaletteColor={flatPaletteColor} 
+                    flatOpacity={flatOpacity}
                     />
                 ))}
             </group>
@@ -580,6 +597,7 @@ function Cityscape({ scale, explosion, baseColor, adjacencyColor, adjacencyWindo
                     fragment={fragment} 
                     factor={explosion}
                     adjacencyColor={adjacencyColor}
+                adjacencyOpacity={adjacencyOpacity}
                     layout={layout}
                 />
             ))}
@@ -587,7 +605,7 @@ function Cityscape({ scale, explosion, baseColor, adjacencyColor, adjacencyWindo
     );
 }
 
-function AdjacencyLines({ fragment, factor, adjacencyColor, layout }: AdjacencyLinesProps) {
+function AdjacencyLines({ fragment, factor, adjacencyColor, adjacencyOpacity, layout }: AdjacencyLinesProps) {
     const adjacencyLinesRef = useRef<(THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial> | null)[]>([]);
 
     const springs = useSpring({
@@ -625,14 +643,14 @@ function AdjacencyLines({ fragment, factor, adjacencyColor, layout }: AdjacencyL
                     }}
                     geometry={new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()])}
                 >
-                    <lineBasicMaterial color={adjacencyColor} transparent opacity={0.5} />
+                    <lineBasicMaterial color={adjacencyColor} transparent opacity={adjacencyOpacity} />
                 </Line3>
             ))}
         </group>
     );
 }
 
-function Fragment({ fragment, factor, baseColor, layout, wireframe, flattenTextures, flatPaletteColor }: FragmentProps) {
+function Fragment({ fragment, factor, baseColor, baseOpacity, flatOpacity, layout, wireframe, flattenTextures, flatPaletteColor }: FragmentProps) {
     const meshRef = useRef<FragmentMesh | null>(null);
     const lineRef = useRef<THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial> | null>(null);
     const groupRef = useRef<THREE.Group | null>(null);
@@ -682,8 +700,10 @@ function Fragment({ fragment, factor, baseColor, layout, wireframe, flattenTextu
             if (!material.userData.originalMapSaved) {
                 material.userData.originalMap = 'map' in material ? material.map || null : null;
                 material.userData.originalColor = 'color' in material && material.color ? material.color.clone() : null;
+                material.userData.originalOpacity = material.opacity ?? 1;
                 material.userData.originalMapSaved = true;
             }
+            const targetOpacity = flattenTextures ? flatOpacity : baseOpacity;
             if ('map' in material) {
                 material.map = flattenTextures ? null : material.userData.originalMap;
             }
@@ -699,6 +719,8 @@ function Fragment({ fragment, factor, baseColor, layout, wireframe, flattenTextu
                     material.color.copy(material.userData.originalColor);
                 }
             }
+            material.opacity = targetOpacity;
+            material.transparent = targetOpacity < 1;
             material.needsUpdate = true;
         };
         if (Array.isArray(fragment.material)) {
@@ -706,7 +728,7 @@ function Fragment({ fragment, factor, baseColor, layout, wireframe, flattenTextu
         } else {
             applyFlatTexture(fragment.material);
         }
-    }, [fragment, flattenTextures, baseColor, flatPaletteColor]);
+    }, [fragment, flattenTextures, baseColor, flatPaletteColor, baseOpacity, flatOpacity]);
 
     const fragmentPosition = useMemo(() => new THREE.Vector3().copy(fragment.userData.fragmentCenter).multiplyScalar(-1), [fragment]);
 
@@ -715,11 +737,21 @@ function Fragment({ fragment, factor, baseColor, layout, wireframe, flattenTextu
             <primitive ref={meshRef} object={fragment} position={fragmentPosition} />
             <mesh>
                 <boxGeometry args={[fragment.userData.baseSize.x, fragment.userData.baseSize.y, fragment.userData.baseSize.z]} />
-                <meshBasicMaterial color={baseColor || "#0000ff"} wireframe />
+                <meshBasicMaterial 
+                    color={baseColor || "#0000ff"} 
+                    wireframe={wireframe}
+                    transparent={baseOpacity < 1}
+                    opacity={baseOpacity}
+                    depthWrite={baseOpacity === 1}
+                />
             </mesh>
             <Line3 ref={lineRef}>
                 <bufferGeometry />
-                <lineBasicMaterial color={baseColor || "#0000ff"} />
+                <lineBasicMaterial 
+                    color={baseColor || "#0000ff"} 
+                    transparent={baseOpacity < 1}
+                    opacity={baseOpacity}
+                />
             </Line3>
         </animated.group>
     );
@@ -739,21 +771,33 @@ export default function App() {
   });
   const layout = layoutControl.layout as LayoutOption;
 
-  const { baseColor, adjacencyColor, adjacencyWindow, wireframe, flattenTextures, flatPaletteColor, whiteBg } = useControls('Visual', {
-    baseColor: { value: COLORS.baseColor },
-    adjacencyColor: { value: COLORS.adjacencyColor },
-    adjacencyWindow: { value: 2, min: 1, max: 5, step: 1 },
+  const { baseColor, baseOpacity, wireframe, whiteBg } = useControls('Base', {
+    baseColor: { value: COLORS.baseColor, label: 'Color' },
+    baseOpacity: { value: 1, min: 0, max: 1, step: 0.01, label: 'Opacity' },
     wireframe: { value: true, label: 'Wireframe' },
+    whiteBg: { value: false, label: 'White BG' },
+  });
+
+  const { flattenTextures, flatPaletteColor, flatOpacity } = useControls('Flat', {
     flattenTextures: { value: false, label: 'Flat Color Only' },
     flatPaletteColor: { value: COLORS.baseColor, label: 'Flat Palette Color' },
-    whiteBg: { value: false, label: 'White BG' },
+    flatOpacity: { value: 1, min: 0, max: 1, step: 0.01, label: 'Flat Opacity' },
+  });
+
+  const { adjacencyColor, adjacencyOpacity, adjacencyWindow } = useControls('Adjacency', {
+    adjacencyColor: { value: COLORS.adjacencyColor, label: 'Adjacency Color' },
+    adjacencyOpacity: { value: 0.5, min: 0, max: 1, step: 0.01, label: 'Adjacency Opacity' },
+    adjacencyWindow: { value: 2, min: 1, max: 5, step: 1 },
   });
   const scale = INIT.scale;
 
   return (
     <Container $whiteBg={whiteBg}>
       <CanvasWrapper>
-        <Canvas camera={{ fov: 80 }} style={{ width: "100%", height: "100%" }}>
+        <Canvas
+          camera={{ fov: 80 }}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
+        >
           <color attach="background" args={[whiteBg ? "#ffffff" : "#000000"]} />
 
           <Suspense fallback={null}>
@@ -762,12 +806,15 @@ export default function App() {
                   scale={scale} 
                   explosion={explosion}
                   baseColor={baseColor}
+                  baseOpacity={baseOpacity}
                   adjacencyColor={adjacencyColor}
+                  adjacencyOpacity={adjacencyOpacity}
                   adjacencyWindow={adjacencyWindow}
                   layout={layout}
                   wireframe={wireframe}
                   flattenTextures={flattenTextures}
                   flatPaletteColor={flatPaletteColor}
+                  flatOpacity={flatOpacity}
               />
             </Center>
           </Suspense>
