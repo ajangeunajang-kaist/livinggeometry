@@ -25,32 +25,8 @@ import { useSpring, animated } from "@react-spring/three";
 type LayoutOption = "Original" | string;
 
 const ALPHABET = [
-  "A",
-  "B",
-  "C",
-  "D",
-  "E",
-  "F",
-  "G",
-  "H",
-  "I",
-  "J",
-  "K",
-  "L",
-  "M",
-  "N",
-  "O",
-  "P",
-  "Q",
-  "R",
-  "S",
-  "T",
-  "U",
-  "V",
-  "W",
-  "X",
-  "Y",
-  "Z",
+  "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M",
+  "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
 ];
 
 // Generate points from letter shape using canvas
@@ -120,6 +96,7 @@ type FragmentUserData = {
   adjacentConnections?: Array<{ position: THREE.Vector3; height: number }>;
   rank?: number;
   height?: number;
+  letterIndex?: number;
 };
 
 type FragmentMaterial = THREE.Material & {
@@ -159,6 +136,7 @@ type CityscapeProps = {
   adjacencyWindow: number;
   layout: LayoutOption;
   letterScale: number;
+  letterAspect: number;
   letterJitter: number;
   wireframe: boolean;
   flattenTextures: boolean;
@@ -437,6 +415,7 @@ function Cityscape({
   adjacencyWindow,
   layout,
   letterScale,
+  letterAspect,
   letterJitter,
   wireframe,
   flattenTextures,
@@ -484,70 +463,40 @@ function Cityscape({
     const size = new THREE.Vector3();
     fullBBox.getSize(size);
     const cellWidth = size.x / GRID_SIZE;
-    const cellHeight = size.y / GRID_SIZE;
-
-    const mapGridToWorld = (gx: number, gy: number) => {
-      const newX = fullBBox.min.x + gx * cellWidth + cellWidth / 2;
-      const newY = fullBBox.min.y + gy * cellHeight + cellHeight / 2;
-      return new THREE.Vector3(newX, newY, 0);
-    };
 
     if (layout === "Original") {
       sortedFragments.forEach((fragment) => {
         fragment.userData.orderedCenter = fragment.userData.baseCenter.clone();
       });
     } else {
-      // Multi-letter or single letter layout
-      const letters = layout.split("");
-      const fragmentsPerLetter = Math.floor(
-        sortedFragments.length / letters.length,
-      );
-      const remainder = sortedFragments.length % letters.length;
-
+      // Single letter layout (centered)
+      const letter = layout;
       const centerX = fullBBox.min.x + size.x / 2;
       const centerY = fullBBox.min.y + size.y / 2;
-      const scaledSizeX = size.x * letterScale;
+      const scaledSizeX = size.x * letterScale * letterAspect;
       const scaledSizeY = size.y * letterScale;
 
-      // Total width of all letters side by side
-      const totalWidth = letters.length * scaledSizeX;
-      const startOffsetX = -totalWidth / 2 + scaledSizeX / 2;
+      const letterPoints = getLetterPoints(letter, sortedFragments.length);
 
-      let fragmentIndex = 0;
-
-      letters.forEach((letter, letterIdx) => {
-        // Distribute remainder fragments to first letters
-        const count = fragmentsPerLetter + (letterIdx < remainder ? 1 : 0);
-        const letterFragments = sortedFragments.slice(
-          fragmentIndex,
-          fragmentIndex + count,
-        );
-        fragmentIndex += count;
-
-        const letterPoints = getLetterPoints(letter, letterFragments.length);
-        if (letterPoints.length > 0) {
-          const xOffset = startOffsetX + letterIdx * scaledSizeX;
-
-          letterFragments.forEach((fragment, index) => {
-            const pointIndex = index % letterPoints.length;
-            const point = letterPoints[pointIndex];
-            const jitter = cellWidth * letterJitter;
-            const newX =
-              centerX +
-              xOffset +
-              (point.x - 0.5) * scaledSizeX +
-              Math.random() * jitter;
-            const newY =
-              centerY + (point.y - 0.5) * scaledSizeY + Math.random() * jitter;
-            fragment.userData.orderedCenter = new THREE.Vector3(newX, newY, 0);
-          });
-        } else {
-          letterFragments.forEach((fragment) => {
-            fragment.userData.orderedCenter =
-              fragment.userData.baseCenter.clone();
-          });
-        }
-      });
+      if (letterPoints.length > 0) {
+        sortedFragments.forEach((fragment, index) => {
+          const pointIndex = index % letterPoints.length;
+          const point = letterPoints[pointIndex];
+          const jitter = cellWidth * letterJitter;
+          const newX =
+            centerX +
+            (point.x - 0.5) * scaledSizeX +
+            Math.random() * jitter;
+          const newY =
+            centerY + (point.y - 0.5) * scaledSizeY + Math.random() * jitter;
+          fragment.userData.orderedCenter = new THREE.Vector3(newX, newY, 0);
+        });
+      } else {
+        sortedFragments.forEach((fragment) => {
+          fragment.userData.orderedCenter =
+            fragment.userData.baseCenter.clone();
+        });
+      }
     }
 
     sortedFragments.forEach((fragment, index) => {
@@ -571,7 +520,7 @@ function Cityscape({
     });
 
     setAllFragments(fragments);
-  }, [layout, adjacencyWindow, letterScale, letterJitter]);
+  }, [layout, adjacencyWindow, letterScale, letterAspect, letterJitter]);
 
   return (
     <group scale={scale}>
@@ -617,15 +566,18 @@ function AdjacencyLines({
     (THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial> | null)[]
   >([]);
 
+  const baseX =
+    layout !== "Original" && fragment.userData.orderedCenter
+      ? fragment.userData.orderedCenter.x
+      : fragment.userData.baseCenter.x;
+  const baseY =
+    layout !== "Original" && fragment.userData.orderedCenter
+      ? fragment.userData.orderedCenter.y
+      : fragment.userData.baseCenter.y;
+
   const springs = useSpring({
-    x:
-      layout !== "Original" && fragment.userData.orderedCenter
-        ? fragment.userData.orderedCenter.x
-        : fragment.userData.baseCenter.x,
-    y:
-      layout !== "Original" && fragment.userData.orderedCenter
-        ? fragment.userData.orderedCenter.y
-        : fragment.userData.baseCenter.y,
+    x: baseX,
+    y: baseY,
   });
 
   useFrame(() => {
@@ -700,15 +652,18 @@ function Fragment({
   > | null>(null);
   const groupRef = useRef<THREE.Group | null>(null);
 
+  const baseX =
+    layout !== "Original" && fragment.userData.orderedCenter
+      ? fragment.userData.orderedCenter.x
+      : fragment.userData.baseCenter.x;
+  const baseY =
+    layout !== "Original" && fragment.userData.orderedCenter
+      ? fragment.userData.orderedCenter.y
+      : fragment.userData.baseCenter.y;
+
   const { x, y } = useSpring({
-    x:
-      layout !== "Original" && fragment.userData.orderedCenter
-        ? fragment.userData.orderedCenter.x
-        : fragment.userData.baseCenter.x,
-    y:
-      layout !== "Original" && fragment.userData.orderedCenter
-        ? fragment.userData.orderedCenter.y
-        : fragment.userData.baseCenter.y,
+    x: baseX,
+    y: baseY,
     config: { mass: 1, tension: 120, friction: 14 },
   });
 
@@ -838,43 +793,54 @@ export default function App() {
     explosion: { value: 0, min: 0, max: 400, step: 0.001 },
   });
 
-  const [typedText, setTypedText] = useState<string>("");
+  type LetterWithPosition = { letter: string; position: { x: number; y: number } };
+  const [letters, setLetters] = useState<LetterWithPosition[]>([]);
+  const [inputLetter, setInputLetter] = useState<string>("");
+  const [pendingLetter, setPendingLetter] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if user is typing in an input/textarea (e.g. Leva controls)
-      const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+  const addLetter = () => {
+    const letter = inputLetter.toUpperCase().replace(/[^A-Z]/g, "");
+    if (letter.length > 0) {
+      setPendingLetter(letter.charAt(0));
+      setInputLetter("");
+    }
+  };
 
-      if (e.key === "Escape") {
-        setTypedText("");
-        return;
-      }
-      if (e.key === "Backspace") {
-        setTypedText((prev) => prev.slice(0, -1));
-        return;
-      }
-      const upper = e.key.toUpperCase();
-      if (/^[A-Z]$/.test(upper)) {
-        setTypedText((prev) => prev + upper);
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  const handleCanvasClick = (point: THREE.Vector3) => {
+    if (pendingLetter && !isDragging) {
+      setLetters((prev) => [
+        ...prev,
+        { letter: pendingLetter, position: { x: point.x, y: point.y } },
+      ]);
+      setPendingLetter(null);
+    }
+  };
+
+  const removeLetter = (index: number) => {
+    setLetters((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      addLetter();
+    }
+  };
 
   const layoutControl = useControls("Collage", {
-    layout: {
-      value: "Original",
-      options: ["Original", ...ALPHABET],
-      label: "Layout Style",
-    },
     letterScale: {
       value: 50,
       min: 1,
       max: 100,
       step: 1,
       label: "Letter Scale",
+    },
+    letterAspect: {
+      value: 1,
+      min: 0.2,
+      max: 3,
+      step: 0.01,
+      label: "Letter Aspect",
     },
     letterJitter: {
       value: 0.9,
@@ -884,10 +850,12 @@ export default function App() {
       label: "Letter Jitter",
     },
   });
-  // Keyboard typedText overrides dropdown selection
+  // Use letters array for layout, or "Original" if empty
   const layout: LayoutOption =
-    typedText.length > 0 ? typedText : (layoutControl.layout as LayoutOption);
+    letters.length > 0 ? letters.map((l) => l.letter).join("") : "Original";
+  const letterPositions = letters.map((l) => l.position);
   const letterScale = layoutControl.letterScale as number;
+  const letterAspect = layoutControl.letterAspect as number;
   const letterJitter = layoutControl.letterJitter as number;
 
   const { baseColor, baseOpacity, wireframe, whiteBg } = useControls("Base", {
@@ -936,7 +904,12 @@ export default function App() {
 
   return (
     <Container $whiteBg={whiteBg}>
-      <CanvasWrapper>
+      <CanvasWrapper $placementMode={!!pendingLetter}>
+        {pendingLetter && (
+          <PendingIndicator $whiteBg={whiteBg}>
+            Click to place "{pendingLetter}"
+          </PendingIndicator>
+        )}
         <Canvas
           camera={{ fov: 80 }}
           style={{
@@ -960,18 +933,56 @@ export default function App() {
                 adjacencyWindow={adjacencyWindow}
                 layout={layout}
                 letterScale={letterScale}
+                letterAspect={letterAspect}
                 letterJitter={letterJitter}
+                letterPositions={letterPositions}
                 wireframe={wireframe}
                 flattenTextures={flattenTextures}
                 flatPaletteColor={flatPaletteColor}
                 flatOpacity={flatOpacity}
+                onDraggingChange={setIsDragging}
               />
             </Center>
           </Suspense>
           <ambientLight intensity={2} />
           <pointLight position={[10, 10, 10]} />
-          <OrbitControls />
+          <OrbitControls enabled={!isDragging && !pendingLetter} />
+          {pendingLetter && (
+            <ClickSurface onCanvasClick={handleCanvasClick} scale={scale} />
+          )}
         </Canvas>
+
+        <LetterControls>
+          <LetterDisplay $whiteBg={whiteBg}>
+            {letters.length === 0 ? (
+              <span style={{ color: whiteBg ? "#666" : "#999", fontSize: 14 }}>
+                Add letters →
+              </span>
+            ) : (
+              letters.map((l, i) => (
+                <LetterChip
+                  key={i}
+                  $whiteBg={whiteBg}
+                  onClick={() => removeLetter(i)}
+                  title="Click to remove"
+                >
+                  {l.letter}
+                </LetterChip>
+              ))
+            )}
+          </LetterDisplay>
+          <LetterInput
+            $whiteBg={whiteBg}
+            value={inputLetter}
+            onChange={(e) => setInputLetter(e.target.value)}
+            onKeyDown={handleInputKeyDown}
+            placeholder="A"
+            maxLength={10}
+          />
+          <AddButton $whiteBg={whiteBg} onClick={addLetter} title="Add letter">
+            +
+          </AddButton>
+        </LetterControls>
       </CanvasWrapper>
     </Container>
   );
