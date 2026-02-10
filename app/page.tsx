@@ -257,6 +257,7 @@ type PNGExporterProps = {
   layout: string;
 };
 
+
 function PNGExporter({ onExportReady, layout }: PNGExporterProps) {
   const { gl, scene, camera } = useThree();
 
