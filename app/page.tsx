@@ -4,11 +4,13 @@ import {
   Canvas,
   useLoader,
   useFrame,
+  useThree,
   type ThreeElements,
 } from "@react-three/fiber";
 import { OrbitControls, Center } from "@react-three/drei";
 import { MTLLoader } from "three/examples/jsm/loaders/MTLLoader.js";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
+import { SVGRenderer } from "three/examples/jsm/renderers/SVGRenderer.js";
 import {
   Suspense,
   useRef,
@@ -16,6 +18,7 @@ import {
   useEffect,
   useMemo,
   forwardRef,
+  useCallback,
 } from "react";
 import styled from "styled-components";
 import { useControls } from "leva";
@@ -159,6 +162,8 @@ type CityscapeProps = {
   adjacencyWindow: number;
   layout: LayoutOption;
   letterScale: number;
+  letterAspect: number;
+  letterSpacing: number;
   letterJitter: number;
   wireframe: boolean;
   flattenTextures: boolean;
@@ -224,6 +229,64 @@ const CanvasWrapper = styled.div`
   position: relative;
   flex: 1;
 `;
+
+const ExportButton = styled.button`
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  padding: 10px 20px;
+  background: #333;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  z-index: 100;
+  &:hover {
+    background: #555;
+  }
+`;
+
+type SVGExporterProps = {
+  onExportReady: (exportFn: () => void) => void;
+  whiteBg: boolean;
+};
+
+function SVGExporter({ onExportReady, whiteBg }: SVGExporterProps) {
+  const { scene, camera, size } = useThree();
+
+  const exportSVG = useCallback(() => {
+    const svgRenderer = new SVGRenderer();
+    svgRenderer.setSize(size.width, size.height);
+    svgRenderer.render(scene, camera);
+
+    const svgElement = svgRenderer.domElement;
+
+    // Add background rect
+    const bgRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    bgRect.setAttribute("width", "100%");
+    bgRect.setAttribute("height", "100%");
+    bgRect.setAttribute("fill", whiteBg ? "#ffffff" : "#000000");
+    svgElement.insertBefore(bgRect, svgElement.firstChild);
+
+    const svgData = new XMLSerializer().serializeToString(svgElement);
+    const blob = new Blob([svgData], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `living-geometry-${Date.now()}.svg`;
+    link.click();
+
+    URL.revokeObjectURL(url);
+  }, [scene, camera, size, whiteBg]);
+
+  useEffect(() => {
+    onExportReady(exportSVG);
+  }, [exportSVG, onExportReady]);
+
+  return null;
+}
 
 function Tile({
   modelName,
@@ -437,6 +500,8 @@ function Cityscape({
   adjacencyWindow,
   layout,
   letterScale,
+  letterAspect,
+  letterSpacing,
   letterJitter,
   wireframe,
   flattenTextures,
@@ -506,11 +571,12 @@ function Cityscape({
 
       const centerX = fullBBox.min.x + size.x / 2;
       const centerY = fullBBox.min.y + size.y / 2;
-      const scaledSizeX = size.x * letterScale;
+      const scaledSizeX = size.x * letterScale * letterAspect;
       const scaledSizeY = size.y * letterScale;
 
-      // Total width of all letters side by side
-      const totalWidth = letters.length * scaledSizeX;
+      // Total width of all letters side by side (with spacing)
+      const letterGap = scaledSizeX * letterSpacing;
+      const totalWidth = letters.length * scaledSizeX + (letters.length - 1) * letterGap;
       const startOffsetX = -totalWidth / 2 + scaledSizeX / 2;
 
       let fragmentIndex = 0;
@@ -526,7 +592,7 @@ function Cityscape({
 
         const letterPoints = getLetterPoints(letter, letterFragments.length);
         if (letterPoints.length > 0) {
-          const xOffset = startOffsetX + letterIdx * scaledSizeX;
+          const xOffset = startOffsetX + letterIdx * (scaledSizeX + letterGap);
 
           letterFragments.forEach((fragment, index) => {
             const pointIndex = index % letterPoints.length;
@@ -571,7 +637,7 @@ function Cityscape({
     });
 
     setAllFragments(fragments);
-  }, [layout, adjacencyWindow, letterScale, letterJitter]);
+  }, [layout, adjacencyWindow, letterScale, letterAspect, letterSpacing, letterJitter]);
 
   return (
     <group scale={scale}>
@@ -864,10 +930,9 @@ export default function App() {
   }, []);
 
   const layoutControl = useControls("Collage", {
-    layout: {
-      value: "Original",
-      options: ["Original", ...ALPHABET],
-      label: "Layout Style",
+    letters: {
+      value: "LG",
+      label: "Letters",
     },
     letterScale: {
       value: 50,
@@ -875,6 +940,20 @@ export default function App() {
       max: 100,
       step: 1,
       label: "Letter Scale",
+    },
+    letterAspect: {
+      value: 1.0,
+      min: 0.2,
+      max: 3.0,
+      step: 0.01,
+      label: "Letter Aspect (Width)",
+    },
+    letterSpacing: {
+      value: -1,
+      min: -2,
+      max: 2.0,
+      step: 0.01,
+      label: "Letter Spacing",
     },
     letterJitter: {
       value: 0.9,
@@ -884,10 +963,20 @@ export default function App() {
       label: "Letter Jitter",
     },
   });
-  // Keyboard typedText overrides dropdown selection
+  // Keyboard typedText overrides text input
+  // Filter to only valid A-Z letters and convert to uppercase
+  const inputLetters = (layoutControl.letters as string)
+    .toUpperCase()
+    .replace(/[^A-Z]/g, "");
   const layout: LayoutOption =
-    typedText.length > 0 ? typedText : (layoutControl.layout as LayoutOption);
+    typedText.length > 0
+      ? typedText
+      : inputLetters.length > 0
+        ? inputLetters
+        : "Original";
   const letterScale = layoutControl.letterScale as number;
+  const letterAspect = layoutControl.letterAspect as number;
+  const letterSpacing = layoutControl.letterSpacing as number;
   const letterJitter = layoutControl.letterJitter as number;
 
   const { baseColor, baseOpacity, wireframe, whiteBg } = useControls("Base", {
@@ -960,6 +1049,8 @@ export default function App() {
                 adjacencyWindow={adjacencyWindow}
                 layout={layout}
                 letterScale={letterScale}
+                letterAspect={letterAspect}
+                letterSpacing={letterSpacing}
                 letterJitter={letterJitter}
                 wireframe={wireframe}
                 flattenTextures={flattenTextures}
