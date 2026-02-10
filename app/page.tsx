@@ -193,8 +193,8 @@ type FragmentProps = {
 
 // Color constants
 const COLORS = {
-  baseColor: "#aaaaaa",
-  adjacencyColor: "rgba(255,255,255,0.5)",
+  baseColor: "#ffffffff",
+  adjacencyColor: "rgba(255, 255, 255, 0)",
 };
 
 const INIT = {
@@ -251,6 +251,46 @@ type SVGExporterProps = {
   onExportReady: (exportFn: () => void) => void;
   whiteBg: boolean;
 };
+
+type PNGExporterProps = {
+  onExportReady: (exportFn: () => void) => void;
+  layout: string;
+};
+
+function PNGExporter({ onExportReady, layout }: PNGExporterProps) {
+  const { gl, scene, camera } = useThree();
+
+  const exportPNG = useCallback(() => {
+    // Save original background
+    const originalBackground = scene.background;
+    const originalClearColor = gl.getClearColor(new THREE.Color());
+    const originalClearAlpha = gl.getClearAlpha();
+
+    // Set transparent background
+    scene.background = null;
+    gl.setClearColor(0x000000, 0);
+    gl.clear();
+    gl.render(scene, camera);
+
+    const dataURL = gl.domElement.toDataURL("image/png");
+
+    // Restore original background
+    scene.background = originalBackground;
+    gl.setClearColor(originalClearColor, originalClearAlpha);
+    gl.render(scene, camera);
+
+    const link = document.createElement("a");
+    link.href = dataURL;
+    link.download = `living-geometry-${layout}-${Date.now()}.png`;
+    link.click();
+  }, [gl, scene, camera, layout]);
+
+  useEffect(() => {
+    onExportReady(exportPNG);
+  }, [exportPNG, onExportReady]);
+
+  return null;
+}
 
 function SVGExporter({ onExportReady, whiteBg }: SVGExporterProps) {
   const { scene, camera, size } = useThree();
@@ -905,6 +945,7 @@ export default function App() {
   });
 
   const [typedText, setTypedText] = useState<string>("");
+  const [exportPNG, setExportPNG] = useState<(() => void) | null>(null);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1012,7 +1053,7 @@ export default function App() {
         label: "Adjacency Color",
       },
       adjacencyOpacity: {
-        value: 0.5,
+        value: 0,
         min: 0,
         max: 1,
         step: 0.01,
@@ -1028,6 +1069,7 @@ export default function App() {
       <CanvasWrapper>
         <Canvas
           camera={{ fov: 80 }}
+          gl={{ alpha: true, preserveDrawingBuffer: true }}
           style={{
             position: "absolute",
             inset: 0,
@@ -1062,7 +1104,14 @@ export default function App() {
           <ambientLight intensity={2} />
           <pointLight position={[10, 10, 10]} />
           <OrbitControls />
+          <PNGExporter
+            onExportReady={(fn) => setExportPNG(() => fn)}
+            layout={layout}
+          />
         </Canvas>
+        <ExportButton onClick={() => exportPNG?.()}>
+          Export PNG
+        </ExportButton>
       </CanvasWrapper>
     </Container>
   );
