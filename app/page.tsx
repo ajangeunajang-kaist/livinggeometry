@@ -255,10 +255,27 @@ type SVGExporterProps = {
 type PNGExporterProps = {
   onExportReady: (exportFn: () => void) => void;
   layout: string;
+  letterScale: number;
+  letterAspect: number;
+  letterSpacing: number;
+  letterJitter: number;
+  flatOpacity: number;
+  baseOpacity: number;
+  wireframe: boolean;
 };
 
 
-function PNGExporter({ onExportReady, layout }: PNGExporterProps) {
+function PNGExporter({
+  onExportReady,
+  layout,
+  letterScale,
+  letterAspect,
+  letterSpacing,
+  letterJitter,
+  flatOpacity,
+  baseOpacity,
+  wireframe,
+}: PNGExporterProps) {
   const { gl, scene, camera } = useThree();
 
   const exportPNG = useCallback(() => {
@@ -280,11 +297,22 @@ function PNGExporter({ onExportReady, layout }: PNGExporterProps) {
     gl.setClearColor(originalClearColor, originalClearAlpha);
     gl.render(scene, camera);
 
+    // Build filename with parameters
+    const params = [
+      `s${letterScale}`,
+      `a${letterAspect.toFixed(2)}`,
+      `sp${letterSpacing.toFixed(2)}`,
+      `j${letterJitter.toFixed(2)}`,
+      `fo${flatOpacity.toFixed(2)}`,
+      `bo${baseOpacity.toFixed(2)}`,
+      wireframe ? "wf" : "solid",
+    ].join("_");
+
     const link = document.createElement("a");
     link.href = dataURL;
-    link.download = `living-geometry-${layout}-${Date.now()}.png`;
+    link.download = `LG_${layout}_${params}_${Date.now()}.png`;
     link.click();
-  }, [gl, scene, camera, layout]);
+  }, [gl, scene, camera, layout, letterScale, letterAspect, letterSpacing, letterJitter, flatOpacity, baseOpacity, wireframe]);
 
   useEffect(() => {
     onExportReady(exportPNG);
@@ -973,7 +1001,7 @@ export default function App() {
 
   const layoutControl = useControls("Collage", {
     letters: {
-      value: "LG",
+      value: "G",
       label: "Letters",
     },
     letterScale: {
@@ -1108,6 +1136,13 @@ export default function App() {
           <PNGExporter
             onExportReady={(fn) => setExportPNG(() => fn)}
             layout={layout}
+            letterScale={letterScale}
+            letterAspect={letterAspect}
+            letterSpacing={letterSpacing}
+            letterJitter={letterJitter}
+            flatOpacity={flatOpacity}
+            baseOpacity={baseOpacity}
+            wireframe={wireframe}
           />
         </Canvas>
         <ExportButton onClick={() => exportPNG?.()}>
