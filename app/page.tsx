@@ -974,7 +974,19 @@ export default function App() {
   });
 
   const [typedText, setTypedText] = useState<string>("");
+  const [hasLetterInput, setHasLetterInput] = useState<boolean>(false);
+  const [introLetter, setIntroLetter] = useState<"G" | "">("G");
   const [exportPNG, setExportPNG] = useState<(() => void) | null>(null);
+
+  useEffect(() => {
+    if (hasLetterInput) return;
+
+    const intervalId = window.setInterval(() => {
+      setIntroLetter((prev) => (prev === "G" ? "" : "G"));
+    }, 2000);
+
+    return () => window.clearInterval(intervalId);
+  }, [hasLetterInput]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -992,6 +1004,7 @@ export default function App() {
       }
       const upper = e.key.toUpperCase();
       if (/^[A-Z]$/.test(upper)) {
+        setHasLetterInput(true);
         setTypedText((prev) => prev + upper);
       }
     };
@@ -1038,11 +1051,12 @@ export default function App() {
   const inputLetters = (layoutControl.letters as string)
     .toUpperCase()
     .replace(/[^A-Z]/g, "");
+  const effectiveInputLetters = hasLetterInput ? inputLetters : introLetter;
   const layout: LayoutOption =
     typedText.length > 0
       ? typedText
-      : inputLetters.length > 0
-        ? inputLetters
+      : effectiveInputLetters.length > 0
+        ? effectiveInputLetters
         : "Original";
   const letterScale = layoutControl.letterScale as number;
   const letterAspect = layoutControl.letterAspect as number;
