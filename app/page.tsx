@@ -1005,7 +1005,7 @@ export default function App() {
       label: "Letters",
     },
     letterScale: {
-      value: 50,
+      value: 61,
       min: 1,
       max: 100,
       step: 1,
